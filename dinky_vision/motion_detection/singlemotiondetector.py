@@ -1,7 +1,7 @@
 ##
 ## Code from pyimagesearch.com
 ##
-import numpy as numpy
+import numpy as np
 import imutils
 import cv2
 
@@ -40,7 +40,7 @@ class SingleMotionDetector:
         # bounding boxes bookmarking
         (minX, minY) = (np.inf, np.inf)
         (maxX, maxY) = (-np.inf, -np.inf)
-
+	
         # if no contours were found, return None
         if len(cnts) == 0:
             return None
