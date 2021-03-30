@@ -1,6 +1,11 @@
 from typing import Optional
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+from library.helpers import *
+
+
 from imutils.video import VideoStream
 import threading
 import datetime
@@ -14,6 +19,10 @@ outputFrame = None
 lock = threading.Lock()
 
 app = FastAPI()
+templates = Jinja2Templates(directory="templates")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
 
 # initialize the video stream and allow the camer sensor to warmup
 vs = VideoStream(usePiCamera=1).start()
@@ -28,7 +37,6 @@ def detect_motion(frameCount):
     # initialize the motion detector and the totaol number of frames read thus far
     md = SingleMotionDetector(accumWeight=0.1)
     total = 0
-    print("performing motion detection")
     # loop over frames from the video stream
     while True:
         # read the net frame from the video stream, resize it, convert to grayscale and blur
@@ -53,6 +61,7 @@ def detect_motion(frameCount):
                 # "motion area" on the output frame
                 (thresh, (minX, minY, maxX, maxY)) = motion
                 cv2.rectangle(frame, (minX, minY), (maxX, maxY), (0, 0, 255), 2)
+                print("motion detected..")
             
         # update the background model and increment the total number
         # of frames read thus far
@@ -83,7 +92,7 @@ def generate():
         yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
         
 
-@app.get("/")
+@app.get("/home")
 async def read_index():
     html_content = """
     <html>
@@ -93,23 +102,39 @@ async def read_index():
         <body>
             <h1>HTML!</h1>
             <h1>Video</h1>
-            <img src="http://localhost:8080/video_feed">
+            <img src="../video_feed">
          </body>
     </html>
     """
     return HTMLResponse(content=html_content, status_code=200)
 
-@app.get("/ping")
-def read_root():
-    return {"pong"}
 
 
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    filepath = "pages/home.html"
+    with open(filepath, "r", encoding="utf-8") as input_file:
+        html = input_file.read()
+    data = {
+        "text": html
+    }
+    print(data)
+    return templates.TemplateResponse("page.html", {"request": request, "data": data})
 
+
+@app.get("/page/{page_name}", response_class=HTMLResponse)
+async def page(request: Request, page_name: str):
+    filepath = "pages/" + page_name + ".html"
+    with open(filepath, "r", encoding="utf-8") as input_file:
+        html = input_file.read()
+    data = {
+        "text": html
+    }
+    return templates.TemplateResponse("page.html", {"request": request, "data": data})
 
 @app.get("/items/{item_id}")
 def read_item(item_id: int, q: Optional[str] = None):
     return {"item_id": item_id, "q": q}
-
 
 @app.get("/video_feed")
 def video_feed():
@@ -118,6 +143,9 @@ def video_feed():
     # return StreamingResponse(generate())
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
 
+@app.get("/ping")
+def read_root():
+    return {"pong"}
 
 #if __name__ == '__main__':
     
