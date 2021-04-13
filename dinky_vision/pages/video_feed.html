@@ -1,5 +1,41 @@
-<div>
-<h1>Video feed</h1>
-<br>
-<img src="/video_feed" width="500">
+
+
+
+
+<div class="container">
+  <div class="row">
+      <div class="col-md-12">
+          <h1>Video feed</h1>
+          <img src="/video_feed" width="500">
+          <h3>Settings</h3>
+
+      </div>
+    </div>
+    <div class="row">
+      <div class="col-md-4">
+        Motion detection
+      </div>
+      <div class="col-md-8">
+          <input id="toggle-motion-detection" type="checkbox" name="say" data-toggle="toggle" data-onstyle="info" data-size="xs" onchange="validate_md()" checked></input>
+      </div>
+    </div>
+  </div>
 </div>
+
+
+<script>
+  function validate_md(){
+    let data = {name: "motion-detection",
+                enabled: document.getElementById("toggle-motion-detection").checked}
+
+    fetch("/api/motion-detection", {
+        method: "POST", 
+        body: JSON.stringify(data)
+      }).then(res => {
+        console.log("Request complete! response:", res);
+      });
+}
+</script>
+
+
+

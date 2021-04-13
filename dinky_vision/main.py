@@ -1,5 +1,6 @@
 from typing import Optional
 from fastapi import FastAPI, Request
+from pydantic import BaseModel
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -13,6 +14,14 @@ import imutils
 import time
 import cv2
 from motion_detection.singlemotiondetector import SingleMotionDetector
+
+class Setting(BaseModel):
+    name: str
+    enabled: bool
+
+
+
+enable_motion_detection = True
 
 # initialize the output frame and a lock used to ensure thread-safe exchanges of the output frame
 outputFrame = None
@@ -34,7 +43,7 @@ def detect_motion(frameCount):
     # grab the global references to the video stream, output feed, and lock variables
     global vs, outputFrame, lock
 
-    # initialize the motion detector and the totaol number of frames read thus far
+    # initialize the motion detector and the total number of frames read thus far
     md = SingleMotionDetector(accumWeight=0.1)
     total = 0
     # loop over frames from the video stream
@@ -47,12 +56,12 @@ def detect_motion(frameCount):
 
         # grab the current timestamp and draw it on the frame
         timestamp = datetime.datetime.now()
-        cv2.putText(frame, timestamp.strftime("%A %d %B %Y %I:%M:%S%p"), (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+        cv2.putText(frame, timestamp.strftime("%c"), (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
 
         # if the total number of frames has reached a sufficient
         # number to construct a reasonable background model, then
         # continue to process the frame
-        if total > frameCount:
+        if total > frameCount and enable_motion_detection:
             # detect motion in the image
             motion = md.detect(gray)
             # check to see if motion was found in the frame
@@ -61,7 +70,7 @@ def detect_motion(frameCount):
                 # "motion area" on the output frame
                 (thresh, (minX, minY, maxX, maxY)) = motion
                 cv2.rectangle(frame, (minX, minY), (maxX, maxY), (0, 0, 255), 2)
-                print("motion detected..")
+                #print("motion detected..")
             
         # update the background model and increment the total number
         # of frames read thus far
@@ -146,6 +155,17 @@ def video_feed():
 @app.get("/ping")
 def read_root():
     return {"pong"}
+
+@app.post("/api/motion-detection")
+def setting_motion_detection(setting: Setting):
+    global enable_motion_detection
+    if (setting.name == "motion-detection") and setting.enabled:
+        enable_motion_detection = True
+    else:
+        enable_motion_detection = False
+
+    print(enable_motion_detection)
+    return None
 
 #if __name__ == '__main__':
     

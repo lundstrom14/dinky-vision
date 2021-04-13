@@ -4,6 +4,7 @@ body {
     margin: 0;
     padding-bottom: 100px; 
     box-sizing: border-box;
+    background: rgb(247, 247, 255);
 }
 
 .wrapper{
