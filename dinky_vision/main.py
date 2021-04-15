@@ -22,6 +22,7 @@ class Setting(BaseModel):
 
 
 enable_motion_detection = True
+enable_edge_detection = False
 
 # initialize the output frame and a lock used to ensure thread-safe exchanges of the output frame
 outputFrame = None
@@ -40,24 +41,62 @@ time.sleep(2.0)
 
 def display_video(frameCount):
     # grab the global references to the video stream, output feed, and lock variables
-    global vs, outputFrame, lock
+    global vs, outputFrame, lock, enable_motion_detection
+
+    # initialize the motion detector and the total number of frames read thus far
+    md = SingleMotionDetector(accumWeight=0.1)
+    total = 0
+    nextFrame = None
 
     # loop over frames from the video stream
     while True:
         # read the net frame from the video stream, resize it, convert to grayscale and blur
         frame = vs.read()
         frame = imutils.resize(frame, width=400)
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (7, 7), 0)
-
+        
         # grab the current timestamp and draw it on the frame
         timestamp = datetime.datetime.now()
         cv2.putText(frame, timestamp.strftime("%c"), (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+
+        # enable motion detection
+        if (enable_motion_detection):
+            
+            # convert to grayscale and blur for the background model
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            gray = cv2.GaussianBlur(gray, (7, 7), 0)
+            
+            # if the total number of frames has reached a sufficient
+            # number to construct a reasonable background model, then
+            # continue to process the frame
+            if total > frameCount:
+
+                # detect motion in the image
+                motion = md.detect(gray)
+                # check to see if motion was found in the frame
+                if motion is not None:
+                    # unpack the tuple and draw the box surrounding the
+                    # "motion area" on the output frame, and set the next frame
+                    (thresh, (minX, minY, maxX, maxY)) = motion
+                    cv2.rectangle(frame, (minX, minY), (maxX, maxY), (0, 0, 255), 2)
+                    nextFrame = frame.copy()
+                    # print("motion detected..")
         
+            # update the background model and increment the total number
+            # of frames read thus far
+            md.update(gray)
+            total += 1
+
+        if (enable_edge_detection):
+            None
+
+        # If nextFrame has not been assigned.
+        if nextFrame is None:
+            nextFrame = frame.copy()
+
         # acquire the lock, set the output frame, and release the
         # lock
         with lock:
-            outputFrame = frame.copy()
+            outputFrame = nextFrame
 
 
 def detect_motion(frameCount):
@@ -119,7 +158,7 @@ def generate():
             if not flag:
                 continue
         # yield the output frame in the byte format
-        yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')        
+        yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n') 
 
 
 @app.get("/home")
