@@ -4,7 +4,7 @@ from pydantic import BaseModel
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
-from library.helpers import *
+# from library.helpers import openfile
 
 
 from imutils.video import VideoStream
@@ -15,10 +15,10 @@ import time
 import cv2
 from motion_detection.singlemotiondetector import SingleMotionDetector
 
+
 class Setting(BaseModel):
     name: str
     enabled: bool
-
 
 
 enable_motion_detection = True
@@ -32,11 +32,32 @@ templates = Jinja2Templates(directory="templates")
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
-
 # initialize the video stream and allow the camer sensor to warmup
 vs = VideoStream(usePiCamera=1).start()
-#vs = VideoStream(src=0).start()
+# vs = VideoStream(src=0).start()
 time.sleep(2.0)
+
+
+def display_video(frameCount):
+    # grab the global references to the video stream, output feed, and lock variables
+    global vs, outputFrame, lock
+
+    # loop over frames from the video stream
+    while True:
+        # read the net frame from the video stream, resize it, convert to grayscale and blur
+        frame = vs.read()
+        frame = imutils.resize(frame, width=400)
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (7, 7), 0)
+
+        # grab the current timestamp and draw it on the frame
+        timestamp = datetime.datetime.now()
+        cv2.putText(frame, timestamp.strftime("%c"), (10, frame.shape[0] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 0, 255), 1)
+        
+        # acquire the lock, set the output frame, and release the
+        # lock
+        with lock:
+            outputFrame = frame.copy()
 
 
 def detect_motion(frameCount):
@@ -52,7 +73,7 @@ def detect_motion(frameCount):
         frame = vs.read()
         frame = imutils.resize(frame, width=400)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray = cv2.GaussianBlur(gray, (7,7), 0)
+        gray = cv2.GaussianBlur(gray, (7, 7), 0)
 
         # grab the current timestamp and draw it on the frame
         timestamp = datetime.datetime.now()
@@ -70,8 +91,8 @@ def detect_motion(frameCount):
                 # "motion area" on the output frame
                 (thresh, (minX, minY, maxX, maxY)) = motion
                 cv2.rectangle(frame, (minX, minY), (maxX, maxY), (0, 0, 255), 2)
-                #print("motion detected..")
-            
+                # print("motion detected..")
+      
         # update the background model and increment the total number
         # of frames read thus far
         md.update(gray)
@@ -98,8 +119,8 @@ def generate():
             if not flag:
                 continue
         # yield the output frame in the byte format
-        yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')
-        
+        yield(b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + bytearray(encodedImage) + b'\r\n')        
+
 
 @app.get("/home")
 async def read_index():
@@ -118,7 +139,6 @@ async def read_index():
     return HTMLResponse(content=html_content, status_code=200)
 
 
-
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     filepath = "pages/home.html"
@@ -127,7 +147,6 @@ async def home(request: Request):
     data = {
         "text": html
     }
-    print(data)
     return templates.TemplateResponse("page.html", {"request": request, "data": data})
 
 
@@ -141,9 +160,11 @@ async def page(request: Request, page_name: str):
     }
     return templates.TemplateResponse("page.html", {"request": request, "data": data})
 
+
 @app.get("/items/{item_id}")
 def read_item(item_id: int, q: Optional[str] = None):
     return {"item_id": item_id, "q": q}
+
 
 @app.get("/video_feed")
 def video_feed():
@@ -151,6 +172,7 @@ def video_feed():
     # type (mime type)
     # return StreamingResponse(generate())
     return StreamingResponse(generate(), media_type="multipart/x-mixed-replace;boundary=frame")
+
 
 @app.get("/ping")
 def read_root():
@@ -167,11 +189,16 @@ def setting_motion_detection(setting: Setting):
     print(enable_motion_detection)
     return None
 
-#if __name__ == '__main__':
-    
+# if __name__ == '__main__':
+
+
 # start a thread that will perform motion detection
-t = threading.Thread(target=detect_motion, args=(32,))
-t.deamon = True
-t.start()
+try:
+    t = threading.Thread(target=display_video, args=(32,))
+    t.deamon = True
+    t.start()
+except (KeyboardInterrupt, SystemExit):
+    exit()
+
 
 # needed? release the video pointer()
